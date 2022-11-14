@@ -18,7 +18,11 @@
     "paths": {
       "@/*": [
         "src/*"
-      ]
+      ],
+      "components/*": ["src/components/*"],
+      "icons/*": ["src/assets/svg/*"],
+      "interfaces/*": ["src/interfaces/*"],
+      "mixins/*": ["src/mixins/*"]
     },
     "lib": [
       "esnext",
