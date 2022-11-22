@@ -114,6 +114,10 @@
           }
           return acc;
         }, []) : categoriesList.map((item: ICategory, index: number) => {
+          item.documents!.map((item: IDocument, index: number) => {
+            item.index = index;
+            return item;
+          }, []);
           item.index = index;
           return item
         })
@@ -135,11 +139,6 @@
       }
 
       function onEnter(el: any, done: any) {
-        let height = 36
-        if($(el).hasClass('category')) {
-          height = $(el).children().length * 3 + 16 * 4.96
-          console.log(height)
-        }
         anime({
           targets: el,
           height: '127' + 'px',

@@ -11,7 +11,7 @@
     .category__arrow.border.border-grey-light.rounded-full(
       class="w-[2.2rem] h-[2.2rem]"
       @mousedown.stop
-      @click.stop="expanded = !expanded"
+      @click.stop="toggleExpanded"
       :class="[{'-rotate-180': expanded}]"
     )
       g-icon(name="ui/arrow").category__arrow_icon
@@ -50,15 +50,14 @@
 
   import ICategory from "interfaces/ICategory";
   import IItemCoords from "interfaces/IItemCoords";
+  import IMousePosition from "interfaces/IMousePosition";
   import IItem from "interfaces/IItem";
   import { Ref } from 'vue'
-  interface IMousePosition {
-    x: number
-    y: number
-  }
 
   import { defineComponent, onMounted, onUpdated, onBeforeUpdate, computed, ref, reactive, watch } from 'vue'
   import {createLogger, useStore} from 'vuex'
+
+  import dragItem from 'mixins/dragItem';
 
   export default defineComponent({
     name: "category",
@@ -101,22 +100,6 @@
       let x: boolean = false;
       let y: boolean = false;
 
-      const getItemCoords = (): IItemCoords => {
-        return {
-          offsetLeft: categoryEl?.value?.offsetLeft ? categoryEl.value.offsetLeft : 0,
-          offsetTop: categoryEl?.value?.offsetTop ? categoryEl.value.offsetTop : 0,
-          offsetWidth: categoryEl?.value?.offsetWidth ? categoryEl.value.offsetWidth : 0,
-          offsetHeight: categoryEl?.value?.offsetHeight ? categoryEl.value.offsetHeight : 0,
-        }
-      }
-
-      onMounted(() => {
-        itemCoords = getItemCoords()
-      });
-      onUpdated(() => {
-        itemCoords = getItemCoords()
-      });
-
       const draggedItem = computed<IItem>(() => store.getters['data/draggedItem']);
       const currentItem = computed<IItem>(() => {
         return {
@@ -126,6 +109,14 @@
       });
       const mouseDown = computed<boolean>(() => store.getters['data/mouseDown']);
       const draggedItemCoords = computed<IItemCoords>(() => store.getters['data/draggedItemCoords']);
+      const searchValue = computed<string>(() => store.getters['data/searchValue']);
+
+      onMounted(() => {
+        itemCoords = getItemCoords(categoryEl)
+      });
+      onUpdated(() => {
+        itemCoords = getItemCoords(categoryEl)
+      });
 
       watch(isActive, (val) => {
         if(val) {
@@ -137,8 +128,6 @@
         }
       });
 
-      const searchValue = computed<string>(() => store.getters['data/searchValue']);
-
       watch(searchValue, (val) => {
           if(val && !itemInSearchValue(props.category.title)) {
             notInSearch.value = true
@@ -147,6 +136,11 @@
           }
         }
       );
+
+      function toggleExpanded() {
+        useCss.value = false;
+        expanded.value = !expanded.value
+      }
 
       function itemInSearchValue(string: string) {
         return string.toLowerCase().indexOf(searchValue.value.toLowerCase()) !== -1
@@ -163,22 +157,8 @@
         }
       })
 
-      function slideDown(callback: any = () => {}) {
-        $(categoryEl.value).slideDown(500, function () {
-          itemCoords = getItemCoords()
-          callback();
-        })
-      }
-
-      function slideUp(callback: any = () => {}) {
-        $(categoryEl.value).slideUp(500, function () {
-          itemCoords = getItemCoords();
-          callback();
-        })
-      }
-
       function onTransitionEnd(event: any) {
-        itemCoords = getItemCoords()
+        itemCoords = getItemCoords(categoryEl)
       }
 
       function onBeforeEnter(el: any) {
@@ -193,6 +173,7 @@
           duration: 500,
           complete: function(anim) {
             el.style.height = '';
+            useCss.value = true;
             done();
           }
         });
@@ -211,6 +192,7 @@
           duration: 500,
           complete: function(anim) {
             transitionName.value = 'fade'
+            useCss.value = true;
             done();
           }
         });
@@ -238,60 +220,6 @@
         isActive.value = false;
       })
 
-      const onMouseDown = (event: any) => {
-        store.dispatch('data/setDraggedItem', currentItem);
-        offset = [
-          categoryEl.value.offsetLeft - event.pageX,
-          categoryEl.value.offsetTop - event.pageY
-        ];
-        onDragStart(event)
-      }
-
-      const onMouseMove = (event: any) => {
-        onDragOver(event)
-      }
-
-      const onMouseUp = (event: any) => {
-        onDrop(event)
-      }
-
-      const onMouseLeave = (event: any) => {
-        onDragLeave(event)
-      }
-
-      const onDrag = (event: any) => {
-        if (isActive.value) {
-          mousePosition.x = event.pageX;
-          mousePosition.y = event.pageY;
-
-          clone
-            .css('left', (mousePosition.x + offset[0]) + 'px')
-            .css('top', (mousePosition.y + offset[1]) + 'px')
-          store.dispatch('data/setDraggedItemCoords', {
-            offsetLeft: clone[0].offsetLeft,
-            offsetTop: clone[0].offsetTop,
-            offsetWidth: clone[0].offsetWidth,
-            offsetHeight: clone[0].offsetHeight,
-          })
-        }
-      }
-
-      const onDragStart = (event: any) => {
-        $(document.body).css('user-select', 'none').css('overflow-x', 'hidden')
-        clone = $(categoryEl.value)
-          .clone()
-          .css('left', (categoryEl.value.offsetLeft) + 'px')
-          .css('top', (categoryEl.value.offsetTop) + 'px')
-          .css('z-index', '1')
-          .css('background-color', '#fff')
-          .css('transition', 'box-shadow 0.2s ease-in-out')
-          .css('box-shadow', '0px 0px 8px #0066FF')
-          .css('width', $(categoryEl.value).prop('clientWidth') + 2 + 'px')
-        clone.find('svg.delete path').css('fill', '#0066FF')
-        $(document.body).before(clone);
-        clone.css('position', 'absolute')
-        isActive.value = true;
-      }
 
       const onDrop = (event: any) => {
         dropBorder.value = null;
@@ -315,35 +243,42 @@
         x = y = false;
       }
 
-      const onDragEnd = (event: any) => {
-        $(document.body).css('user-select', 'all').css('overflow-x', 'auto')
-        clone.remove()
-        store.dispatch('data/setDraggedItemCoords', {
-          offsetLeft: 0,
-          offsetTop: 0,
-          offsetWidth: 0,
-          offsetHeight: 0,
-        })
-      }
-
-      const onDragEnter = (event: any) => {
-      }
-
       const onDragOver = (event: any) => {
         if(!isActive.value && mouseDown.value) {
           dropBorder.value = 'category__drop-border-bottom'
         }
       }
 
-      const onDragLeave = (event: any, ) => {
-        dropBorder.value = null
-      }
 
       const onDeleteCategory = () => {
         $(categoryRoot.value).slideUp(500, function () {
           store.dispatch('data/deleteCategory', currentItem.value.categoryItem)
         })
       }
+
+      const {
+        onDrag,
+        onDragStart,
+        onDragLeave,
+        onDragEnd,
+        getItemCoords,
+        onMouseMove,
+        onMouseUp,
+        onMouseLeave,
+        onMouseDown,
+      } = dragItem({
+        clone,
+        dropBorder,
+        isActive,
+        element: categoryEl,
+        mousePosition,
+        offset,
+        mouseDown,
+        draggedItem,
+        currentItem,
+        onDrop,
+        onDragOver,
+      });
 
       return {
         categoryRoot,
@@ -372,10 +307,11 @@
         onDrag,
         onDragStart,
         onDragEnd,
-        onDragEnter,
         onDragLeave,
         onDragOver,
-        onDrop
+        onDrop,
+
+        toggleExpanded
       };
     }
   })

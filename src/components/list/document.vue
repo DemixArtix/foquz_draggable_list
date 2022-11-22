@@ -24,10 +24,9 @@
   import IDocument from "interfaces/IDocument";
   import IItem from "interfaces/IItem";
   import IItemCoords from "interfaces/IItemCoords";
-  interface IMousePosition {
-    x: number
-    y: number
-  }
+  import IMousePosition from "interfaces/IMousePosition";
+
+  import dragItem from 'mixins/dragItem';
 
   export default defineComponent({
     name: "document",
@@ -46,6 +45,7 @@
       },
     },
     setup(props, {emit}) {
+
       const store = useStore();
 
       const documentEl: Ref<any> = ref(null);
@@ -63,23 +63,6 @@
       let x: boolean = false;
       let y: boolean = false;
 
-      const getItemCoords = (): IItemCoords => {
-        return {
-          offsetLeft: documentEl?.value?.offsetLeft ? documentEl.value.offsetLeft : 0,
-          offsetTop: documentEl?.value?.offsetTop ? documentEl.value.offsetTop : 0,
-          offsetWidth: documentEl?.value?.offsetWidth ? documentEl.value.offsetWidth : 0,
-          offsetHeight: documentEl?.value?.offsetHeight ? documentEl.value.offsetHeight : 0,
-        }
-      }
-      onMounted(() => {
-        itemCoords = getItemCoords()
-      });
-
-      onUpdated(() => {
-        itemCoords = getItemCoords()
-      });
-
-
       const draggedItem = computed<IItem>(() => store.getters['data/draggedItem']);
       const currentItem = computed<IItem>(() => {
         return {
@@ -89,6 +72,14 @@
       });
       const mouseDown = computed<boolean>(() => store.getters['data/mouseDown']);
       const draggedItemCoords = computed<IItemCoords>(() => store.getters['data/draggedItemCoords']);
+
+      onMounted(() => {
+        itemCoords = getItemCoords(documentEl)
+      });
+
+      onUpdated(() => {
+        itemCoords = getItemCoords(documentEl)
+      });
 
       watch(isActive, (val) => {
         if(val) {
@@ -102,17 +93,16 @@
 
       $(document).on('mousedown', () => {
         if(!isActive.value) {
-          itemCoords = getItemCoords()
+          itemCoords = getItemCoords(documentEl)
         }
       })
 
       function onTransitionEnd(event: any) {
-        itemCoords = getItemCoords()
+        itemCoords = getItemCoords(documentEl)
       }
 
       $(document).on('mousemove', function (e) {
         if (!isActive.value && mouseDown.value) {
-
           let a = itemCoords;
           let b = draggedItemCoords.value;
           x = (a.offsetWidth / 2) > Math.abs((a.offsetWidth + a.offsetLeft) - (b.offsetWidth + b.offsetLeft));
@@ -132,61 +122,6 @@
         isActive.value = false;
       })
 
-      const onMouseDown = (event: any) => {
-        store.dispatch('data/setDraggedItem', currentItem);
-        offset = [
-          documentEl.value.offsetLeft - event.pageX,
-          documentEl.value.offsetTop - event.pageY
-        ];
-        onDragStart(event)
-      }
-
-      const onMouseMove = (event: any) => {
-        onDragOver(event)
-      }
-
-      const onMouseUp = (event: any) => {
-        onDrop(event)
-      }
-
-      const onMouseLeave = (event: any) => {
-        onDragLeave(event)
-      }
-
-      const onDrag = (event: any) => {
-        if (isActive.value) {
-          mousePosition.x = event.pageX;
-          mousePosition.y = event.pageY;
-
-          clone.css('left', (mousePosition.x + offset[0]) + 'px')
-          clone.css('top', (mousePosition.y + offset[1]) + 'px')
-          store.dispatch('data/setDraggedItemCoords', {
-            offsetLeft: clone[0].offsetLeft,
-            offsetTop: clone[0].offsetTop,
-            offsetWidth: clone[0].offsetWidth,
-            offsetHeight: clone[0].offsetHeight,
-          })
-        }
-      }
-
-      const onDragStart = (event: any) => {
-        $(document.body).css('user-select', 'none').css('overflow-x', 'hidden')
-        clone = $(documentEl.value)
-          .clone()
-          .css('margin-left', '0')
-          .css('left', (documentEl.value.offsetLeft) + 'px')
-          .css('top', (documentEl.value.offsetTop) + 'px')
-          .css('z-index', '1')
-          .css('background-color', '#fff')
-          .css('transition', 'box-shadow 0.2s ease-in-out')
-          .css('box-shadow', '0px 0px 8px #0066FF')
-          .css('width', $(documentEl.value).prop('clientWidth') + 2 + 'px')
-        clone.find('svg.delete path').css('fill', '#0066FF')
-        $(document.body).before(clone);
-        clone.css('position', 'absolute')
-        isActive.value = true;
-      }
-
       const onDrop = (event: any) => {
         dropBorder.value = null
         if(!isActive.value) {
@@ -203,35 +138,39 @@
         x = y = false;
       }
 
-      const onDragEnd = (event: any) => {
-        $(document.body).css('user-select', 'all').css('overflow-x', 'auto')
-        isActive.value = false;
-        clone.remove()
-        store.dispatch('data/setDraggedItemCoords', {
-          offsetLeft: 0,
-          offsetTop: 0,
-          offsetWidth: 0,
-          offsetHeight: 0,
-        })
-      }
-
-      const onDragEnter = (event: any) => {
-
-      }
-
       const onDragOver = (event: any) => {
         if(!isActive.value && mouseDown.value && draggedItem.value.documentItem !== -1) {
           dropBorder.value = 'document__drop-border-bottom'
         }
       }
 
-      const onDragLeave = (event: any, ) => {
-        dropBorder.value = null
-      }
-
       const onDeleteDocument = () => {
         store.dispatch('data/deleteDocument', currentItem.value)
       }
+
+      const {
+        onDrag,
+        onDragStart,
+        onDragLeave,
+        onDragEnd,
+        getItemCoords,
+        onMouseMove,
+        onMouseUp,
+        onMouseLeave,
+        onMouseDown,
+      } = dragItem({
+        clone,
+        dropBorder,
+        isActive,
+        element: documentEl,
+        mousePosition,
+        offset,
+        mouseDown,
+        draggedItem,
+        currentItem,
+        onDrop,
+        onDragOver
+      });
 
       return {
         documentEl,
@@ -247,7 +186,6 @@
 
         onDragStart,
         onDragEnd,
-        onDragEnter,
         onDragLeave,
         onDragOver,
         onDrop,
